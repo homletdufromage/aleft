@@ -4,7 +4,7 @@ CFLAGS=--pedantic
 LD=gcc
 LDFLAGS=-g
 
-OBJ = aleft.o
+OBJ = client.o
 
 client:$(OBJ)
 	$(LD) -o client $(OBJ) $(LDFLAGS)
