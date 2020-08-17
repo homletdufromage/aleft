@@ -6,13 +6,12 @@ LDFLAGS=-g
 
 OBJ = aleft.o
 
-# STEGANO
-aleft:$(OBJ)
-	$(LD) -o aleft $(OBJ) $(LDFLAGS)
+client:$(OBJ)
+	$(LD) -o client $(OBJ) $(LDFLAGS)
 
-aleft.o: aleft.c
-	gcc -c aleft.c -o aleft.o $(CFLAGS)
+client.o: client.c
+	gcc -c client.c -o client.o $(CFLAGS)
 
 ## Other
 clean:
-	rm -f *.o $(EXEC) *~ aleft
+	rm -f *.o $(EXEC) *~ client
