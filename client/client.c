@@ -17,12 +17,15 @@
 #include <string.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <stdbool.h>
 
 #define PORT "11037"
 #define BUF_SIZE 1024
 
 #define FILENAME_LEN 128
 #define FILESIZE_LEN 10
+
+typedef int SOCKET;
 
 /*
 MESSAGE STRUCTURE :
@@ -47,13 +50,13 @@ MESSAGE STRUCTURE :
  * @arg sockfd: server's socket descriptor
  * @arg fileSize: size of the file
  */
-char* recvFile(int sockfd, char* header, size_t headerSize, size_t fileSize);
+void recvFile(SOCKET sockfd, char** rawfile, size_t recvBytesNb, size_t fileSize);
 
 /**
  * Once the connecion is made, this function listens to
  * the header and the file.
  */
-int handle_server(int serverSocket);
+int handle_server(SOCKET serverSocket);
 
 /**
  * Puts the file size from the header into size
@@ -65,6 +68,11 @@ void decode_fileSize(char* header, size_t* size);
  * 
  */
 void decode_fileName(char* header, char* fileName);
+
+/**
+ * Checks the format of the header
+ */
+bool check_header(char* filename, char* fileSizeStr);
 
 /**
  * Receives the file header.
@@ -80,19 +88,19 @@ void decode_fileName(char* header, char* fileName);
  * 
  * @return the received header
  */
-char* recvHeader(int sockfd, size_t* headerSize);
+char* recvHeader(SOCKET sockfd, size_t* headerSize);
 
 /**
  * Waits for someone to connect through sockfd.
  */
-void listen_server(int sockfd);
+int listen_server(SOCKET sockfd);
 
 /**
  * Creates the program's socket.
  * 
  * @return the socket's file descriptor
  */
-int create_socket();
+SOCKET create_socket();
 
 /**
  * 
@@ -106,8 +114,8 @@ static void* get_in_addr(struct sockaddr* sa) {
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-int create_socket() {
-    int sockfd;
+SOCKET create_socket() {
+    SOCKET sockfd;
     struct addrinfo hints, *cliInfo, *p;
     int rv;
 
@@ -150,8 +158,8 @@ int create_socket() {
     return sockfd;
 }
 
-void listen_server(int sockfd) {
-    int new_fd;
+int listen_server(SOCKET sockfd) {
+    SOCKET new_fd;
     struct sockaddr_storage their_addr;
 
     if (listen(sockfd, 1) == -1) {
@@ -166,19 +174,17 @@ void listen_server(int sockfd) {
     }
 
     // Gets the client's IP address in string format
-    char* ip = malloc(INET_ADDRSTRLEN * sizeof(char));
+    char ip[INET_ADDRSTRLEN];
     inet_ntop(their_addr.ss_family,
                 get_in_addr((struct sockaddr*)&their_addr),
                 ip,  INET_ADDRSTRLEN*sizeof(char));
 
-    printf("Hello, %s.\n", ip);
-    
-    if (handle_server(new_fd) != EXIT_SUCCESS)
-        fprintf(stderr, "An error has occured.\n");
+    printf("Hello, %s\n", ip);
 
+    return handle_server(new_fd);
 }
 
-char* recvHeader(int sockfd, size_t* headerSize) {
+char* recvHeader(SOCKET sockfd, size_t* headerSize) {
     const size_t HEADER_LEN = FILENAME_LEN + FILESIZE_LEN;
 
     size_t recvBytesNb = 0;
@@ -193,8 +199,13 @@ char* recvHeader(int sockfd, size_t* headerSize) {
      * Part of the beginning of the file may also be received with the header,
      * and has to be taken into account.
      */
+    bool disconnected = false;
     while (recvBytesNb < HEADER_LEN) {
-        size_t msgSize = recv(sockfd, buffer, BUF_SIZE, 0);
+        int msgSize = recv(sockfd, buffer, BUF_SIZE, 0);
+        if (msgSize <= 0) {
+            disconnected = true;
+            break;
+        }
         header = realloc(header, recvBytesNb + msgSize);
         
         // Copy of the buffer into the header
@@ -202,6 +213,11 @@ char* recvHeader(int sockfd, size_t* headerSize) {
             header[i] = buffer[i-recvBytesNb];
 
         recvBytesNb += msgSize;
+    }
+    if (disconnected) {
+        if (header)
+           free(header);
+        return NULL;
     }
     *headerSize = recvBytesNb;
 
@@ -220,30 +236,37 @@ void decode_fileSize(char* header, size_t* size) {
     *size = strtol(fileSizeStr, NULL, 10);
 }
 
-char* recvFile(int sockfd, char* header, size_t headerSize, size_t fileSize) {
-    char buffer[BUF_SIZE] = {0};
-    char* rawfile = NULL;
-    size_t recvBytesNb = 0, msgSize = 0;
-
-    /* *
-     * If headerSize > FILENAME_LEN+FILESIZE_LEN, then it means
-     * that a part of the beginning of the file is contained
-     * inside of header, and has to be put into "rawfile".
-     * */
-    
-    if (headerSize > FILENAME_LEN+FILESIZE_LEN) { 
-        recvBytesNb = headerSize-(FILENAME_LEN+FILESIZE_LEN);
-        rawfile = malloc(recvBytesNb);
-        for(size_t i = 0; i < recvBytesNb; i++) {
-            rawfile[i] = header[FILENAME_LEN+FILESIZE_LEN+i];
-        }
+bool check_header(char* filename, char* fileSizeStr) {
+    bool zeroEncountered = false;
+    for(int i = 0; i < FILENAME_LEN; i++) {
+        if (filename[i] == '\0')
+            zeroEncountered = true;
+        if (zeroEncountered)
+            if (filename[i] != '\0')
+                return false;
     }
+
+    bool numberEncountered = false;
+    for(int i = 0; i < FILESIZE_LEN; i++) {
+        if (fileSizeStr[i] != ' ')
+            numberEncountered = true;
+        if (numberEncountered)
+            if (fileSizeStr[i] < '0' || fileSizeStr[i] > '9')
+                return false;
+    }
+
+    return true;
+}
+
+void recvFile(SOCKET sockfd, char** rawfile, size_t recvBytesNb, size_t fileSize) {
+    char buffer[BUF_SIZE] = {0};
+    int msgSize = 0;
 
     while ((msgSize = recv(sockfd, buffer, BUF_SIZE, 0)) != 0) {
         if (msgSize != -1) {
-            rawfile = realloc(rawfile, recvBytesNb + msgSize);
+            *rawfile = realloc(*rawfile, recvBytesNb + msgSize);
             for(size_t i = 0; i < msgSize; i++)
-                rawfile[recvBytesNb+i] = buffer[i];
+                (*rawfile)[recvBytesNb+i] = buffer[i];
             recvBytesNb += msgSize;
 
             if (recvBytesNb >= fileSize)
@@ -253,19 +276,28 @@ char* recvFile(int sockfd, char* header, size_t headerSize, size_t fileSize) {
 
     if (recvBytesNb < fileSize) {
         fprintf(stderr, "ERROR: Transfer is incomplete, only %lu Bytes out of %lu received.\n", recvBytesNb, fileSize);
-        free(rawfile);
-        return NULL;
+        free(*rawfile);
     }
-    
-    return rawfile;
 }
 
-int handle_server(int serverSocket) {
+int handle_server(SOCKET serverSocket) {
     // HEADER
     size_t headerSize = 0;
 
     fprintf(stderr, "Awaiting header...");
     char* header = recvHeader(serverSocket, &headerSize);
+    if (!header) {
+        fprintf(stderr, "\nERROR: an error has occured during the header transfer.\n");
+        close(serverSocket);
+        return EXIT_FAILURE;
+    }
+
+    // Checking header format
+    if (!check_header(header, header+FILENAME_LEN)){
+        fprintf(stderr, "\nERROR: wrong header format.\n");
+        free(header);
+        return EXIT_FAILURE;
+    }
 
     char fileName[FILENAME_LEN+1];
     size_t fileSize;
@@ -275,7 +307,23 @@ int handle_server(int serverSocket) {
 
     // FILE
     fprintf(stderr, "Awaiting file...");
-    char* rawfile = recvFile(serverSocket, header, headerSize, fileSize);
+
+    /* *
+     * If headerSize > FILENAME_LEN+FILESIZE_LEN, then it means
+     * that a part of the beginning of the file is contained
+     * inside of header, and has to be put into "rawfile".
+     * */
+    char* rawfile = NULL;
+    size_t recvBytesNb = 0;
+    if (headerSize > FILENAME_LEN+FILESIZE_LEN) { 
+        recvBytesNb = headerSize-(FILENAME_LEN+FILESIZE_LEN);
+        rawfile = malloc(recvBytesNb);
+        for(size_t i = 0; i < recvBytesNb; i++) {
+            rawfile[i] = header[FILENAME_LEN+FILESIZE_LEN+i];
+        }
+    }
+
+    recvFile(serverSocket, &rawfile, recvBytesNb, fileSize);
 
     if (!rawfile) {
         free(header);
@@ -298,7 +346,7 @@ int handle_server(int serverSocket) {
 
 int main(int argc, char const *argv[])
 {
-    int sockfd;
+    SOCKET sockfd;
 
     printf("Creating the client socket...");
     if ((sockfd = create_socket()) == -1) {
@@ -308,9 +356,10 @@ int main(int argc, char const *argv[])
     printf("OK !\n");
 
     printf("Client ready.\n");
-    listen_server(sockfd);
-
-    printf("Transfer completed.\n");
+    if (listen_server(sockfd) == EXIT_SUCCESS)
+        printf("Transfer completed.\n");
+    else
+        printf("Sorry, the transfer has not been completed.\n");
 
     return 0;
 }
