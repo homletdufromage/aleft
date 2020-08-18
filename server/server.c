@@ -1,108 +1,181 @@
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#define INVALID_SOCKET -1
-#define SOCKET_ERROR -1
-
-typedef int SOCKET;
-typedef struct sockaddr_in SOCKADDR_IN;
-typedef struct sockaddr SOCKADDR;
-
-#define PORT 11037
-#define IP "127.0.0.1"
-#define BUF_SIZE 1024
-
-#define FILENAME "/home/g/Desktop/charlier.png"
-#define OUTPUT_NAME "output.png"
-#define FILENAME_LEN 128
-#define FILESIZE_LEN 10
- 
-typedef struct{
-
-    FILE* file;
-    char size[FILESIZE_LEN];
-    char name[FILENAME_LEN];
-}File;
+#include "server.h"
 
 int main(void)
 {
- 
-    SOCKET sock;
+
     SOCKADDR_IN sin;
+
+    File* f = open_file(FILENAME);
+    if(f == NULL){
+        fprintf(stderr, "an error occurred while opening the file!\n");
+        return EXIT_FAILURE;
+    }
+
+    SOCKET sock = create_socket(AF_INET, SOCK_STREAM, 0, &sin, IP, PORT);
+    if(sock == ERROR){
+        fprintf(stderr, "an error occurred while creating the socket!\n");
+        return EXIT_FAILURE;
+    }
+
+    int connection = start_connection(sock, sin);
+    if(connection == ERROR){
+        fprintf(stderr, "an error occurred while starting the connection!\n");
+        return EXIT_FAILURE;
+    }
+
+    int header = send_header(sock, f);
+    if(header == ERROR){
+        fprintf(stderr, "an error occurred while sending the header!\n");
+        return EXIT_FAILURE;
+    }
+    int message = send_message(sock, f);
+    if(message == ERROR){
+        fprintf(stderr, "an error occurred while sending the message!\n");
+        return EXIT_FAILURE;
+    }
+
+    stop_connection(sock);
+    free_file(f);
+    
+    return EXIT_SUCCESS;
+}
+
+
+unsigned long get_file_size(char* filename){
+
+    assert(filename != NULL);
+
     struct stat st;
-    long unsigned size;
-    char empty[FILENAME_LEN] = {0};
+
+    stat(filename, &st);
+    return st.st_size;
+}
+
+File* create_file(){
+
+    File* f = malloc(sizeof(File));
+    if(f == NULL) return NULL;
+    return f;
+}
+
+File* open_file(char* filename){
+
+    assert(filename != NULL);
 
     printf("Opening file...");
-    File* f = malloc(sizeof(File));
-    if(f == NULL){
-        perror("unable to create file");
-        return EXIT_FAILURE;
+
+    File* f = create_file();
+
+    if(f == NULL)
+        return NULL;
+
+    f->file = fopen(filename, "r");
+
+    if(f->file == NULL)
+        return NULL;
+
+    if(get_file_size(filename) > MAX_SIZE){
+        fprintf(stderr, "error: file is too big!\n");
+        return NULL;
     }
 
-    f->file = fopen(FILENAME, "r");
-    if(f->file == NULL){
-        perror("unable to open file");
-        return EXIT_FAILURE;
-    }
-    strcpy(f->name, empty);
-    strcpy(f->name, OUTPUT_NAME);
-    stat(FILENAME, &st);
-    size = st.st_size;
-    if(size > 999999999){
-        perror("your file is too big!\n");
-        return EXIT_FAILURE;
-    }
-    sprintf(f->size, "%10lu", size);
+    sprintf(f->size, "%10lu", get_file_size(filename));
+
+    strcpy(f->name, filename);
+
     printf("OK!\n");
+
+    return f;
+}
+
+SOCKET create_socket(int domain, int type, int protocol, SOCKADDR_IN* sin, char* ip, char* port){
 
     printf("Creating socket...");
-    if((sock = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET){
-        perror("Unable to create socket\n");
-        return EXIT_FAILURE;
-    }
+
+    assert(sin != NULL && ip != NULL && port != NULL);
+
+    SOCKET sock = socket(domain, type, protocol); 
+    if(sock == ERROR) return ERROR; 
+
+    sin->sin_addr.s_addr = inet_addr(ip);
+    sin->sin_family = domain;
+    sin->sin_port = htons(atoi(port));
+
     printf("OK!\n");
 
-    sin.sin_addr.s_addr = inet_addr(IP);
-    sin.sin_family = AF_INET;
-    sin.sin_port = htons(PORT);
+    return sock;
+}
+
+
+int send_header(SOCKET sock, File* file){
+
+    printf("Sending Header...");
+
+    if(send(sock, file->name, FILENAME_LEN, 0) != FILENAME_LEN)
+       return ERROR;
+
+    if(send(sock, file->size, FILESIZE_LEN, 0) != FILESIZE_LEN)
+        return ERROR;
+
+    printf("OK!\n");
+
+    return SUCCESS;
+
+}
+
+int send_message(SOCKET sock, File* f){
+
+    char buffer[BUF_SIZE], format[MAX_FORMAT_SIZE];
+
+    unsigned long size = atol(f->size);
+
+    printf("Sending message...");
+
+    unsigned rest = size % BUF_SIZE;
+
+    for(unsigned initialSize = size; size!=rest; size-=BUF_SIZE){
+
+        fscanf(f->file, "%1024c", buffer);
+        if(send(sock, buffer, BUF_SIZE, 0) != BUF_SIZE)
+            return ERROR;
+    }
+
+    sprintf(format, "%%%dc", rest);
+    fscanf(f->file, format, buffer);
+    if(send(sock, buffer, rest, 0) != rest)
+        return ERROR;
+
+    printf("OK!\n");
+
+    return SUCCESS;
+
+}
+
+int start_connection(SOCKET sock, SOCKADDR_IN sin){
 
     printf("Connection to %s through the port %d...", inet_ntoa(sin.sin_addr), htons(sin.sin_port));
-    if(connect(sock, (SOCKADDR*)&sin, sizeof(sin)) != SOCKET_ERROR){
 
-        printf("OK!\n");
+    int connectionState = connect(sock, (SOCKADDR*)&sin, sizeof(sin));
+    if(connectionState == ERROR)
+        return ERROR;
 
-        printf("Sending Header...");
-        send(sock, f->name, 128, 0);
-        send(sock, f->size, 10, 0);
-        printf("OK!\n");
+    printf("OK!\n");
 
-        printf("Sending message...");
-        for(unsigned int i; i < size; i++){
-            char c;
-            fscanf(f->file, "%c", &c);
-            send(sock, &c, 1, 0);
-        }
-        printf("OK!\n");
+    return SUCCESS;
+}
 
-    }
-
-    else
-        printf("\nUnable to connect to %s\n", inet_ntoa(sin.sin_addr));
-
+void stop_connection(SOCKET sock){
 
     printf("Closing connection...");
-    fclose(f->file);
-    free(f);
     close(sock);
     printf("OK!\n");
- 
-    return EXIT_SUCCESS;
+
+}
+
+void free_file(File* file){
+
+    assert(file != NULL);
+
+    fclose(file->file);
+    free(file);
 }
