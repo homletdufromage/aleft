@@ -18,15 +18,17 @@ typedef struct sockaddr SOCKADDR;
 #define IP "127.0.0.1"
 
 #define BUF_SIZE 1024
+
 #define MAX_FORMAT_SIZE 7
 #define MAX_SIZE 9999999999
+
 #define FILENAME_LEN 128
 #define FILESIZE_LEN 10
+
 #define ERROR -1
 #define SUCCESS 0
 
-#define FILENAME "boigelot.png"
- 
+
 typedef struct{
 
     FILE* file; // the file itself
@@ -103,3 +105,8 @@ int start_connection(SOCKET sock, SOCKADDR_IN sin);
 * stops the connection
 */
 void stop_connection(SOCKET sock);
+
+/*
+* parses command line arguments given to the program
+*/
+int parse_arguments(int argc, char** argv, File** f);

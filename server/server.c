@@ -1,13 +1,13 @@
 #include "server.h"
 
-int main(void)
+int main(int argc, char* argv[])
 {
 
     SOCKADDR_IN sin;
+    File* f;
 
-    File* f = open_file(FILENAME);
-    if(f == NULL){
-        fprintf(stderr, "an error occurred while opening the file!\n");
+    int args = parse_arguments(argc, argv, &f);
+    if(args == ERROR){
         return EXIT_FAILURE;
     }
 
@@ -40,6 +40,37 @@ int main(void)
     return EXIT_SUCCESS;
 }
 
+int parse_arguments(int argc, char** argv, File** f){
+
+    assert(f != NULL);
+
+    if(argc < 3){
+        fprintf(stderr, "usage : ./server -i [filename.extension]\n");
+        return ERROR;
+    }
+
+    const char *optstring = ":i";
+    int value;
+
+    while((value = getopt(argc, argv, optstring)) != EOF){
+
+        switch(value){
+
+            case 'i':
+                (*f) = open_file(argv[optind]);
+                if(f == NULL) return ERROR;
+            break;
+
+            default:
+                fprintf(stderr, "usage : ./server -i [filename.extension]\n");
+                return ERROR;
+
+        }
+    }
+
+    return SUCCESS;
+}
+
 
 unsigned long get_file_size(char* filename){
 
@@ -62,17 +93,21 @@ File* open_file(char* filename){
 
     assert(filename != NULL);
 
-    printf("Opening file...");
+    fprintf(stderr, "Opening file...");
 
     File* f = create_file();
 
-    if(f == NULL)
+    if(f == NULL){
+        fprintf(stderr, "error: unable to create the file!\n");
         return NULL;
+    }
 
     f->file = fopen(filename, "r");
 
-    if(f->file == NULL)
+    if(f->file == NULL){
+        fprintf(stderr, "error: unable to open \"%s\"\n", filename);
         return NULL;
+    }
 
     if(get_file_size(filename) > MAX_SIZE){
         fprintf(stderr, "error: file is too big!\n");
@@ -90,7 +125,7 @@ File* open_file(char* filename){
 
 SOCKET create_socket(int domain, int type, int protocol, SOCKADDR_IN* sin, char* ip, char* port){
 
-    printf("Creating socket...");
+    fprintf(stderr, "Creating socket...");
 
     assert(sin != NULL && ip != NULL && port != NULL);
 
@@ -109,7 +144,7 @@ SOCKET create_socket(int domain, int type, int protocol, SOCKADDR_IN* sin, char*
 
 int send_header(SOCKET sock, File* file){
 
-    printf("Sending Header...");
+    fprintf(stderr, "Sending Header...");
 
     if(send(sock, file->name, FILENAME_LEN, 0) != FILENAME_LEN)
        return ERROR;
@@ -129,11 +164,11 @@ int send_message(SOCKET sock, File* f){
 
     unsigned long size = atol(f->size);
 
-    printf("Sending message...");
+    fprintf(stderr, "Sending message...");
 
     unsigned rest = size % BUF_SIZE;
 
-    for(unsigned initialSize = size; size!=rest; size-=BUF_SIZE){
+    for(unsigned long initialSize = size; size!=rest; size-=BUF_SIZE){
 
         fscanf(f->file, "%1024c", buffer);
         if(send(sock, buffer, BUF_SIZE, 0) != BUF_SIZE)
@@ -153,7 +188,7 @@ int send_message(SOCKET sock, File* f){
 
 int start_connection(SOCKET sock, SOCKADDR_IN sin){
 
-    printf("Connection to %s through the port %d...", inet_ntoa(sin.sin_addr), htons(sin.sin_port));
+    fprintf(stderr, "Connection to %s through the port %d...", inet_ntoa(sin.sin_addr), htons(sin.sin_port));
 
     int connectionState = connect(sock, (SOCKADDR*)&sin, sizeof(sin));
     if(connectionState == ERROR)
