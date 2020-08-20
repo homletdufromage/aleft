@@ -269,14 +269,20 @@ void recvFile(SOCKET sockfd, char** rawfile, size_t recvBytesNb, size_t fileSize
                 (*rawfile)[recvBytesNb+i] = buffer[i];
             recvBytesNb += msgSize;
 
+            fprintf(stderr, "\b\b\b\b");
+            fprintf(stderr, " %.0f%%", ((float)recvBytesNb/(float)fileSize)*100.0);
+
             if (recvBytesNb >= fileSize)
                 break;
         }
     }
 
     if (recvBytesNb < fileSize) {
-        fprintf(stderr, "ERROR: Transfer is incomplete, only %lu Bytes out of %lu received.\n", recvBytesNb, fileSize);
-        free(*rawfile);
+        fprintf(stderr, "\nERROR: Transfer is incomplete, only %lu Bytes out of %lu received.\n", recvBytesNb, fileSize);
+        if (*rawfile) {
+            free(*rawfile);
+            *rawfile = NULL;
+        }
     }
 }
 
@@ -306,7 +312,7 @@ int handle_server(SOCKET serverSocket) {
     fprintf(stderr, "OK!\n");
 
     // FILE
-    fprintf(stderr, "Awaiting file...");
+    fprintf(stderr, "Awaiting file...   0%%");
 
     /* *
      * If headerSize > FILENAME_LEN+FILESIZE_LEN, then it means
@@ -329,7 +335,7 @@ int handle_server(SOCKET serverSocket) {
         free(header);
         return EXIT_FAILURE;
     }
-    fprintf(stderr, "OK!\n");
+    fprintf(stderr, " OK!\n");
 
     // SAVING THE FILE
     FILE* file = fopen(fileName, "w");
