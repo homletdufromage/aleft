@@ -131,7 +131,7 @@ SOCKET create_socket() {
 
     for (p = cliInfo; p != NULL; p = p->ai_next) {
         if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
-            perror("client: socket");
+            perror("receiver: socket");
             continue;
         }
 
@@ -143,7 +143,7 @@ SOCKET create_socket() {
 
         if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
             close(sockfd);
-            perror("client: bind");
+            perror("receiver: bind");
             continue;
         }
 
@@ -173,7 +173,7 @@ int listen_server(SOCKET sockfd) {
         fprintf(stderr, "Connexion errors\n");
     }
 
-    // Gets the client's IP address in string format
+    // Gets the sender's IP address in string format
     char ip[INET_ADDRSTRLEN];
     inet_ntop(their_addr.ss_family,
                 get_in_addr((struct sockaddr*)&their_addr),
@@ -270,7 +270,23 @@ void recvFile(SOCKET sockfd, char** rawfile, size_t recvBytesNb, size_t fileSize
             recvBytesNb += msgSize;
 
             fprintf(stderr, "\r");
-            fprintf(stderr, "Awaiting file...%0.f%%", ((float)recvBytesNb/(float)fileSize)*100.0);
+            float recvStr = (float) recvBytesNb, sizeStr = (float) fileSize;
+            char unit[3];
+            strcpy(unit, "B\0");
+            if (recvBytesNb > 1000 && recvBytesNb < 1000000) {
+                recvStr /= 1000.0;
+                sizeStr /= 1000.0;
+                strcpy(unit, "KB\0");
+            } else if (recvBytesNb >= 1000000 && recvBytesNb < 1000000000) {
+                recvStr /= 1000000.0;
+                sizeStr /= 1000000.0;
+                strcpy(unit, "MB\0");
+            } else if (recvBytesNb >= 1000000000) {
+                recvStr /= 1000000000.0;
+                sizeStr /= 1000000000.0;
+                strcpy(unit, "GB\0");
+            }
+            fprintf(stderr, "Awaiting file...%0.f%% (%.3f/%.3f %s received)", ((float)recvStr/(float)sizeStr)*100.0, recvStr, sizeStr, unit);
             fflush(stderr);
 
             if (recvBytesNb >= fileSize)
@@ -352,14 +368,14 @@ int main(int argc, char const *argv[])
 {
     SOCKET sockfd;
 
-    printf("Creating the client socket...");
+    printf("Creating the receiver socket...");
     if ((sockfd = create_socket()) == -1) {
-        fprintf(stderr, "unable to create the client socket\n");
+        fprintf(stderr, "unable to create the receiver socket\n");
         exit(1);
     }
     printf("OK !\n");
 
-    printf("Client ready.\n");
+    printf("Receiveer ready.\n");
     if (listen_server(sockfd) == EXIT_SUCCESS)
         printf("Transfer completed.\n");
     else
