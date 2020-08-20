@@ -269,8 +269,9 @@ void recvFile(SOCKET sockfd, char** rawfile, size_t recvBytesNb, size_t fileSize
                 (*rawfile)[recvBytesNb+i] = buffer[i];
             recvBytesNb += msgSize;
 
-            fprintf(stderr, "\b\b\b\b");
-            fprintf(stderr, " %.0f%%", ((float)recvBytesNb/(float)fileSize)*100.0);
+            fprintf(stderr, "\r");
+            fprintf(stderr, "Awaiting file...%0.f%%", ((float)recvBytesNb/(float)fileSize)*100.0);
+            fflush(stderr);
 
             if (recvBytesNb >= fileSize)
                 break;
@@ -310,9 +311,6 @@ int handle_server(SOCKET serverSocket) {
     decode_fileName(header, fileName);
     decode_fileSize(header, &fileSize);
     fprintf(stderr, "OK!\n");
-
-    // FILE
-    fprintf(stderr, "Awaiting file...   0%%");
 
     /* *
      * If headerSize > FILENAME_LEN+FILESIZE_LEN, then it means

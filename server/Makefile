@@ -9,7 +9,7 @@ OBJ = server.o
 server:$(OBJ)
 	$(LD) -o server $(OBJ) $(LDFLAGS)
 
-server.o: server.c
+server.o: server.c server.h
 	gcc -c server.c -o server.o $(CFLAGS)
 
 ## Other
