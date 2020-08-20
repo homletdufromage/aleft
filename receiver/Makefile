@@ -4,14 +4,14 @@ CFLAGS=--pedantic -Wall
 LD=gcc
 LDFLAGS=-g
 
-OBJ = client.o
+OBJ = receiver.o
 
-client:$(OBJ)
-	$(LD) -o client $(OBJ) $(LDFLAGS)
+receiver:$(OBJ)
+	$(LD) -o receiver $(OBJ) $(LDFLAGS)
 
-client.o: client.c
-	gcc -c client.c -o client.o $(CFLAGS)
+receiver.o: receiver.c
+	gcc -c receiver.c -o receiver.o $(CFLAGS)
 
 ## Other
 clean:
-	rm -f *.o $(EXEC) *~ client
+	rm -f *.o $(EXEC) *~ receiver

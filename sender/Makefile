@@ -4,14 +4,14 @@ CFLAGS=--pedantic
 LD=gcc
 LDFLAGS=-g
 
-OBJ = server.o
+OBJ = sender.o
 
-server:$(OBJ)
-	$(LD) -o server $(OBJ) $(LDFLAGS)
+sender:$(OBJ)
+	$(LD) -o sender $(OBJ) $(LDFLAGS)
 
-server.o: server.c server.h
-	gcc -c server.c -o server.o $(CFLAGS)
+sender.o: sender.c sender.h
+	gcc -c sender.c -o sender.o $(CFLAGS)
 
 ## Other
 clean:
-	rm -f *.o $(EXEC) *~ server
+	rm -f *.o $(EXEC) *~ sender
