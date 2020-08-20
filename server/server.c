@@ -164,14 +164,12 @@ int send_message(SOCKET sock, File* f){
 
     double size = atol(f->size);
 
-    fprintf(stderr, "Sending message...\n");
-
     unsigned rest = (int)size % BUF_SIZE;
     double totalSent = size - rest;
 
     for(double nbSent = 0; nbSent != totalSent; nbSent += BUF_SIZE){
 
-        printf("\r%d%%", (int)(((nbSent / size) * 100))+1);
+        printf("\rSending message... %d%%", (int)(((nbSent / size) * 100))+1);
         fflush(stdout);
 
         fscanf(f->file, "%1024c", buffer);
