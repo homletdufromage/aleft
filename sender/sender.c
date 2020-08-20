@@ -169,7 +169,7 @@ int send_message(SOCKET sock, File* f){
 
     for(double nbSent = 0; nbSent != totalSent; nbSent += BUF_SIZE){
 
-        printf("\rSending message... %d%%", (int)(((nbSent / size) * 100))+1);
+        fprintf(stderr, "\rSending message...%d%%", (int)(((nbSent / size) * 100))+1);
         fflush(stdout);
 
         fscanf(f->file, "%1024c", buffer);
@@ -182,6 +182,8 @@ int send_message(SOCKET sock, File* f){
     if(send(sock, buffer, rest, 0) != rest)
         return ERROR;
 
+    printf(" OK!\n");
+
     return SUCCESS;
 
 }
@@ -189,7 +191,7 @@ int send_message(SOCKET sock, File* f){
 int start_connection(SOCKET sock, SOCKADDR_IN sin){
 
     fprintf(stderr, "Connection to %s through the port %d...", inet_ntoa(sin.sin_addr), htons(sin.sin_port));
-
+    
     int connectionState = connect(sock, (SOCKADDR*)&sin, sizeof(sin));
     if(connectionState == ERROR)
         return ERROR;
@@ -201,7 +203,7 @@ int start_connection(SOCKET sock, SOCKADDR_IN sin){
 
 void stop_connection(SOCKET sock){
 
-    printf("\nClosing connection...");
+    printf("Closing connection...");
     close(sock);
     printf("OK!\n");
 
