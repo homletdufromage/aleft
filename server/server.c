@@ -162,13 +162,17 @@ int send_message(SOCKET sock, File* f){
 
     char buffer[BUF_SIZE], format[MAX_FORMAT_SIZE];
 
-    unsigned long size = atol(f->size);
+    double size = atol(f->size);
 
-    fprintf(stderr, "Sending message...");
+    fprintf(stderr, "Sending message...\n");
 
-    unsigned rest = size % BUF_SIZE;
+    unsigned rest = (int)size % BUF_SIZE;
+    double totalSent = size - rest;
 
-    for(unsigned long initialSize = size; size!=rest; size-=BUF_SIZE){
+    for(double nbSent = 0; nbSent != totalSent; nbSent += BUF_SIZE){
+
+        printf("\r%d%%", (int)(((nbSent / size) * 100))+1);
+        fflush(stdout);
 
         fscanf(f->file, "%1024c", buffer);
         if(send(sock, buffer, BUF_SIZE, 0) != BUF_SIZE)
@@ -179,8 +183,6 @@ int send_message(SOCKET sock, File* f){
     fscanf(f->file, format, buffer);
     if(send(sock, buffer, rest, 0) != rest)
         return ERROR;
-
-    printf("OK!\n");
 
     return SUCCESS;
 
@@ -201,7 +203,7 @@ int start_connection(SOCKET sock, SOCKADDR_IN sin){
 
 void stop_connection(SOCKET sock){
 
-    printf("Closing connection...");
+    printf("\nClosing connection...");
     close(sock);
     printf("OK!\n");
 
