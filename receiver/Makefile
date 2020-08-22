@@ -1,6 +1,6 @@
 # Tools & flags
 CC=gcc
-CFLAGS=--pedantic -Wall
+CFLAGS=--pedantic -Wall -O3
 LD=gcc
 LDFLAGS=-g
 

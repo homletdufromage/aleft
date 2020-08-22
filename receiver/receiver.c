@@ -20,31 +20,6 @@
 
 #include "receiver.h"
 
-/*
-MESSAGE STRUCTURE :
-[HEADER]
-    FILENAME_LEN Bytes of filename
-        e.g. "h e l l o . t x t \0 ... \0 "
-              1 2 3 4 5 6 7 8 9 10 ... 128
-    
-    FILESIZE_LEN Bytes of file size
-        e.g. "      2048" = 2048 Bytes
-
-[FILE CONTENT]
-    Everything that follows the header is the sent file.
-    The number of bytes from this section is known
-    thanks to the size written in the HEADER.
-    (e.g. 2048 Bytes according to the above example)
-*/
-
-/**
- * Listens to sockfd to receive the file
- * 
- * @arg sockfd: server's socket descriptor
- * @arg fileSize: size of the file
- */
-void recvFile(SOCKET sockfd, char** rawfile, size_t recvBytesNb, size_t fileSize);
-
 void* get_in_addr(struct sockaddr* sa) {
     if (sa->sa_family == AF_INET)
         return &(((struct sockaddr_in*)sa)->sin_addr);
@@ -279,15 +254,15 @@ int copy_str_to_file(char* rawfile, char* fileName, size_t fileSize) {
     return EXIT_SUCCESS;
 }
 
-int start_transfer(SOCKET serverSocket) {
+int start_transfer(SOCKET senderSocket) {
     // Receiving the header first
     size_t headerSize = 0;
 
     fprintf(stderr, "Awaiting header...");
-    char* header = recvHeader(serverSocket, &headerSize);
+    char* header = recvHeader(senderSocket, &headerSize);
     if (!header) {
         fprintf(stderr, RED"\nError: "RESET"an error has occured during the header transfer.\n");
-        close(serverSocket);
+        close(senderSocket);
         return EXIT_FAILURE;
     }
 
@@ -321,8 +296,8 @@ int start_transfer(SOCKET serverSocket) {
     }
 
     // Receiving the file
-    recvFile(serverSocket, &rawfile, recvBytesNb, fileSize);
-    close(serverSocket);
+    recvFile(senderSocket, &rawfile, recvBytesNb, fileSize);
+    close(senderSocket);
     free(header);
 
     if (!rawfile) {

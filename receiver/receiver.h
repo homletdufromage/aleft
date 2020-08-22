@@ -1,7 +1,19 @@
+/**
+ * ALEFT PROJECT
+ * 
+ * @author Alexandre E.
+ * @author Lev M.
+ * @date August 2020
+ * 
+ * @note This program is a part of the ALEFT Project.
+ *       It's a naive file transfert program, which allows
+ *       two users to transfer a file to each other.
+ * 
+ *       This program simply listens through the port 11037.
+ * */
 #ifndef __RECEIVER__
 #define __RECEIVER__
 #include <unistd.h>
-
 
 /*
 In order for this receiver to understand the incoming file,
@@ -44,13 +56,15 @@ typedef int SOCKET;
 /**
  * Creates the program's socket.
  * 
- * @return the socket's file descriptor
+ * @return the socket's file descriptor or -1 if an error has occured
  */
 SOCKET create_socket();
 
 /**
  * Performs a casting to get the sin_addr from
  * the sockaddr_in version of the given sockaddr struct
+ * 
+ * @param sa sockaddr struct from which read the sin_addr
  * */
 void* get_in_addr(struct sockaddr* sa);
 
@@ -66,10 +80,12 @@ SOCKET listen_sender(SOCKET sockfd);
  * Once the connecion is made, the transfer can begin and this
  * function awaits for the file.
  * 
+ * @param senderSocket socketfd of the sender
+ * 
  * @return EXIT_SUCCESS if the transfer was successful
  *         EXIT_FAILURE if an error has occured
  */
-int start_transfer(SOCKET serverSocket);
+int start_transfer(SOCKET senderSocket);
 
 /**
  * Listens for the file header.
@@ -85,15 +101,16 @@ char* recvHeader(SOCKET sockfd, size_t* headerSize);
 /**
  * Puts the file size from the header into size
  * 
- * @param header 
+ * @param header header from which decode the file size
+ * @param size address of the size variable to use
  */
 void decode_fileSize(char* header, size_t* size);
 
 /**
  * Puts the filename from the header into fileName
  * 
- * @param header header from whitch decode the fileName
- * @param fileName str in whitch write the fileName
+ * @param header header from which decode the fileName
+ * @param fileName str in which write the fileName
  */
 void decode_fileName(char* header, char* fileName);
 
@@ -108,6 +125,17 @@ void decode_fileName(char* header, char* fileName);
  */
 bool check_header(char* filename, char* fileSizeStr);
 
+/**
+ * Listens to sockfd to receive the file
+ * 
+ * @param sockfd sender's socket descriptor
+ * @param rawfile pointer to the str in which write the received file
+ * @param recvBytesNb number of already received bytes
+ * @param fileSize size of the file awaited
+ * 
+ * If an error occurs, (*rawfile) is set to NULL and the memory is freed.
+ */
+void recvFile(SOCKET sockfd, char** rawfile, size_t recvBytesNb, size_t fileSize);
 
 /**
  * Saves the string contained in rawfile in a file "fileName".
