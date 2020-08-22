@@ -1,7 +1,7 @@
 all:
-	cd server; make
-	cd client; make
+	cd receiver; make
+	cd sender; make
 
 clean:
-	cd server; make clean
-	cd client; make clean
+	cd receiver; make clean
+	cd sender; make clean
