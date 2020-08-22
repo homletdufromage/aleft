@@ -13,19 +13,12 @@
  * */
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <stdbool.h>
 
-#define PORT "11037"
-#define BUF_SIZE 1024
-
-#define FILENAME_LEN 128
-#define FILESIZE_LEN 10
-
-typedef int SOCKET;
+#include "receiver.h"
 
 /*
 MESSAGE STRUCTURE :
@@ -52,62 +45,7 @@ MESSAGE STRUCTURE :
  */
 void recvFile(SOCKET sockfd, char** rawfile, size_t recvBytesNb, size_t fileSize);
 
-/**
- * Once the connecion is made, this function listens to
- * the header and the file.
- */
-int handle_server(SOCKET serverSocket);
-
-/**
- * Puts the file size from the header into size
- */
-void decode_fileSize(char* header, size_t* size);
-
-/**
- * Puts the filename from the header into fileName
- * 
- */
-void decode_fileName(char* header, char* fileName);
-
-/**
- * Checks the format of the header
- */
-bool check_header(char* filename, char* fileSizeStr);
-
-/**
- * Receives the file header.
- * 
- * STRUCTURE OF THE HEADER :
- * FILENAME_LEN Bytes of file name followed by FILESIZE_LEN of file size.
- * The filename uses a padding of '\0' after the end of the name
- * The file size is a string where the size is written in decimal form
- * after a series of whitespaces (e.g. "       128" = 128 Bytes)
- * 
- * @arg sockfd : socket to listen to
- * @arg headerSize : address of a variable in which to write the size
- * 
- * @return the received header
- */
-char* recvHeader(SOCKET sockfd, size_t* headerSize);
-
-/**
- * Waits for someone to connect through sockfd.
- */
-int listen_server(SOCKET sockfd);
-
-/**
- * Creates the program's socket.
- * 
- * @return the socket's file descriptor
- */
-SOCKET create_socket();
-
-/**
- * 
- * */
-static void* get_in_addr(struct sockaddr* sa);
-
-static void* get_in_addr(struct sockaddr* sa) {
+void* get_in_addr(struct sockaddr* sa) {
     if (sa->sa_family == AF_INET)
         return &(((struct sockaddr_in*)sa)->sin_addr);
     
@@ -116,41 +54,62 @@ static void* get_in_addr(struct sockaddr* sa) {
 
 SOCKET create_socket() {
     SOCKET sockfd;
-    struct addrinfo hints, *cliInfo, *p;
+    struct addrinfo hints, *rcvInfo, *p;
     int rv;
 
+    // Initialize the socket
     memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_family = AF_UNSPEC; // IPv4 or IPv6
+    hints.ai_socktype = SOCK_STREAM; // SOCK_STREAM (TCP) or SOCK_DGRAM (UDP)
     hints.ai_flags = AI_PASSIVE; // use my IP
 
-    if ((rv = getaddrinfo(NULL, PORT, &hints, &cliInfo)) != 0){
+    /**
+     * NULL because we don't connect anywhere, we let the sender connect to us
+     * PORT is the used port
+     * &hints address of the socket initialization parameters
+     * &rcvInfo pointer to the address of the addrinfo struct to initialize with a linked list.
+     * 
+     * rcvInfo will contain a linked list of structs containing
+     * an Internet address that can be specified in a call to bind() or connect().
+     * */
+    if ((rv = getaddrinfo(NULL, PORT, &hints, &rcvInfo)) != 0){
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-        return 1;
+        return -1;
     }
 
-    for (p = cliInfo; p != NULL; p = p->ai_next) {
+    for (p = rcvInfo; p != NULL; p = p->ai_next) {
+        /**
+         * Creates the socket file descriptor thanks to the current node
+         * */
         if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
-            perror("receiver: socket");
+            perror("socket()");
             continue;
         }
 
-        int yes = 1;
-        if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
-            perror("setsockopt");
-            exit(1);
+        /**
+         * Allows to lose the boring "Address already in use" error message
+         * by specifying the OS that this program is allowed to reuse the port
+         * */
+        int yaaas = 1;
+        if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yaaas, sizeof(int)) == -1) {
+            perror("setsockopt()");
+            return -1;
         }
 
+        /**
+         * Binds the socket to one of the computer's ports, so the kernel can match an incoming
+         * packet to a certain process' socket descriptor.
+         * */
         if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
             close(sockfd);
-            perror("receiver: bind");
+            perror("bind()");
             continue;
         }
 
         break;
     }
 
-    freeaddrinfo(cliInfo);
+    freeaddrinfo(rcvInfo);
 
     if (!p)
         return -1;
@@ -158,30 +117,29 @@ SOCKET create_socket() {
     return sockfd;
 }
 
-int listen_server(SOCKET sockfd) {
+SOCKET listen_sender(SOCKET sockfd) {
     SOCKET new_fd;
     struct sockaddr_storage their_addr;
 
     if (listen(sockfd, 1) == -1) {
         perror("listen");
-        exit(1);
+        return -1;
     }
 
     socklen_t sin_size = sizeof their_addr;
     new_fd = accept(sockfd, (struct sockaddr*)&their_addr, &sin_size);
     if (new_fd == -1) {
-        fprintf(stderr, "Connexion errors\n");
+        fprintf(stderr, "Could not accept()\n");
+        return -1;
     }
 
-    // Gets the sender's IP address in string format
     char ip[INET_ADDRSTRLEN];
     inet_ntop(their_addr.ss_family,
                 get_in_addr((struct sockaddr*)&their_addr),
                 ip,  INET_ADDRSTRLEN*sizeof(char));
+    printf("New connection from %s\n", ip);
 
-    printf("Hello, %s\n", ip);
-
-    return handle_server(new_fd);
+    return new_fd;
 }
 
 char* recvHeader(SOCKET sockfd, size_t* headerSize) {
@@ -214,6 +172,7 @@ char* recvHeader(SOCKET sockfd, size_t* headerSize) {
 
         recvBytesNb += msgSize;
     }
+
     if (disconnected) {
         if (header)
            free(header);
@@ -286,8 +245,8 @@ void recvFile(SOCKET sockfd, char** rawfile, size_t recvBytesNb, size_t fileSize
                 sizeStr /= 1000000000.0;
                 strcpy(unit, "GB\0");
             }
-            fprintf(stderr, "Awaiting file...%0.f%% (%.3f/%.3f %s received)", ((float)recvStr/(float)sizeStr)*100.0, recvStr, sizeStr, unit);
-            fflush(stderr);
+            printf("Awaiting file...%0.f%% (%.3f/%.3f %s received)", ((float)recvStr/(float)sizeStr)*100.0, recvStr, sizeStr, unit);
+            fflush(stdout);
 
             if (recvBytesNb >= fileSize)
                 break;
@@ -295,7 +254,7 @@ void recvFile(SOCKET sockfd, char** rawfile, size_t recvBytesNb, size_t fileSize
     }
 
     if (recvBytesNb < fileSize) {
-        fprintf(stderr, "\nERROR: Transfer is incomplete, only %lu Bytes out of %lu received.\n", recvBytesNb, fileSize);
+        fprintf(stderr, RED "\nError: " RESET "Transfer is incomplete, only %lu Bytes out of %lu received.\n", recvBytesNb, fileSize);
         if (*rawfile) {
             free(*rawfile);
             *rawfile = NULL;
@@ -303,30 +262,48 @@ void recvFile(SOCKET sockfd, char** rawfile, size_t recvBytesNb, size_t fileSize
     }
 }
 
-int handle_server(SOCKET serverSocket) {
-    // HEADER
+int copy_str_to_file(char* rawfile, char* fileName, size_t fileSize) {
+    // SAVING THE FILE
+    FILE* file = fopen(fileName, "w");
+    if (!file)
+        return EXIT_FAILURE;
+
+    for(size_t i = 0; i < fileSize; i++)
+        if (fprintf(file, "%c", rawfile[i]) < 0) {
+            fclose(file);
+            fprintf(stderr, RED "Error: " RESET "an error has occured during the saving of the file.\n");
+            return EXIT_FAILURE;
+        }
+    
+    fclose(file);
+    return EXIT_SUCCESS;
+}
+
+int start_transfer(SOCKET serverSocket) {
+    // Receiving the header first
     size_t headerSize = 0;
 
     fprintf(stderr, "Awaiting header...");
     char* header = recvHeader(serverSocket, &headerSize);
     if (!header) {
-        fprintf(stderr, "\nERROR: an error has occured during the header transfer.\n");
+        fprintf(stderr, RED"\nError: "RESET"an error has occured during the header transfer.\n");
         close(serverSocket);
         return EXIT_FAILURE;
     }
 
-    // Checking header format
+    // Checking the header format
     if (!check_header(header, header+FILENAME_LEN)){
-        fprintf(stderr, "\nERROR: wrong header format.\n");
+        fprintf(stderr, RED"\nError: "RESET"wrong header format.\n");
         free(header);
         return EXIT_FAILURE;
     }
 
+    // Decoding header
     char fileName[FILENAME_LEN+1];
     size_t fileSize;
     decode_fileName(header, fileName);
     decode_fileSize(header, &fileSize);
-    fprintf(stderr, "OK!\n");
+    fprintf(stderr, GRN"OK!\n"RESET);
 
     /* *
      * If headerSize > FILENAME_LEN+FILESIZE_LEN, then it means
@@ -343,43 +320,21 @@ int handle_server(SOCKET serverSocket) {
         }
     }
 
+    // Receiving the file
     recvFile(serverSocket, &rawfile, recvBytesNb, fileSize);
+    close(serverSocket);
+    free(header);
 
     if (!rawfile) {
-        free(header);
         return EXIT_FAILURE;
     }
-    fprintf(stderr, " OK!\n");
+    fprintf(stderr, GRN" OK!\n"RESET);
 
-    // SAVING THE FILE
-    FILE* file = fopen(fileName, "w");
-    for(size_t i = 0; i < fileSize; i++)
-        fprintf(file, "%c", rawfile[i]);
-    
-    fclose(file);
+    int status = copy_str_to_file(rawfile, fileName, fileSize);
     free(rawfile);
-    free(header);
-    close(serverSocket);
-    
-    return EXIT_SUCCESS;
-}
 
-int main(int argc, char const *argv[])
-{
-    SOCKET sockfd;
+    if (status != EXIT_SUCCESS)
+        fprintf(stderr, "The file couldn't be saved.\n");
 
-    printf("Creating the receiver socket...");
-    if ((sockfd = create_socket()) == -1) {
-        fprintf(stderr, "unable to create the receiver socket\n");
-        exit(1);
-    }
-    printf("OK !\n");
-
-    printf("Receiveer ready.\n");
-    if (listen_server(sockfd) == EXIT_SUCCESS)
-        printf("Transfer completed.\n");
-    else
-        printf("Sorry, the transfer has not been completed.\n");
-
-    return 0;
+    return status;
 }
