@@ -14,6 +14,12 @@
 #ifndef __RECEIVER__
 #define __RECEIVER__
 #include <unistd.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <netdb.h>
+#include <arpa/inet.h>
 
 /*
 In order for this receiver to understand the incoming file,
@@ -41,11 +47,10 @@ the packet must have this structure:
     the file content is: "bonjour"
 */
 
-#define RED   "\x1B[31m"
-#define GRN   "\x1B[32m"
+#define RED   "\033[1m\033[31m"
+#define GRN   "\033[1m\033[32m"
 #define RESET "\x1B[0m"
 
-#define PORT "11037"
 #define BUF_SIZE 1024
 
 #define FILENAME_LEN 128
@@ -56,9 +61,11 @@ typedef int SOCKET;
 /**
  * Creates the program's socket.
  * 
+ * @param PORT port of the socket
+ * 
  * @return the socket's file descriptor or -1 if an error has occured
  */
-SOCKET create_socket();
+SOCKET create_socket(const char* PORT);
 
 /**
  * Performs a casting to get the sin_addr from

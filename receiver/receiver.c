@@ -11,12 +11,6 @@
  * 
  *       This program simply listens through the port 11037.
  * */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <stdbool.h>
 
 #include "receiver.h"
 
@@ -27,7 +21,7 @@ void* get_in_addr(struct sockaddr* sa) {
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-SOCKET create_socket() {
+SOCKET create_socket(const char* PORT) {
     SOCKET sockfd;
     struct addrinfo hints, *rcvInfo, *p;
     int rv;
@@ -196,6 +190,8 @@ void recvFile(SOCKET sockfd, char** rawfile, size_t recvBytesNb, size_t fileSize
     char buffer[BUF_SIZE] = {0};
     int msgSize = 0;
 
+    printf("Awaiting file...0%% (0/0 B received)");
+    fflush(stdout);
     while ((msgSize = recv(sockfd, buffer, BUF_SIZE, 0)) != 0) {
         if (msgSize != -1) {
             *rawfile = realloc(*rawfile, recvBytesNb + msgSize);
@@ -220,7 +216,7 @@ void recvFile(SOCKET sockfd, char** rawfile, size_t recvBytesNb, size_t fileSize
                 sizeStr /= 1000000000.0;
                 strcpy(unit, "GB\0");
             }
-            printf("Awaiting file...%0.f%% (%.3f/%.3f %s received)", ((float)recvStr/(float)sizeStr)*100.0, recvStr, sizeStr, unit);
+            printf("Awaiting file...%0.f%% (%.2f/%.2f %s received)", ((float)recvStr/(float)sizeStr)*100.0, recvStr, sizeStr, unit);
             fflush(stdout);
 
             if (recvBytesNb >= fileSize)
@@ -258,7 +254,7 @@ int start_transfer(SOCKET senderSocket) {
     // Receiving the header first
     size_t headerSize = 0;
 
-    fprintf(stderr, "Awaiting header...");
+    printf("Awaiting header...");
     char* header = recvHeader(senderSocket, &headerSize);
     if (!header) {
         fprintf(stderr, RED"\nError: "RESET"an error has occured during the header transfer.\n");
@@ -278,7 +274,7 @@ int start_transfer(SOCKET senderSocket) {
     size_t fileSize;
     decode_fileName(header, fileName);
     decode_fileSize(header, &fileSize);
-    fprintf(stderr, GRN"OK!\n"RESET);
+    printf(GRN"OK!\n"RESET);
 
     /* *
      * If headerSize > FILENAME_LEN+FILESIZE_LEN, then it means
@@ -303,7 +299,7 @@ int start_transfer(SOCKET senderSocket) {
     if (!rawfile) {
         return EXIT_FAILURE;
     }
-    fprintf(stderr, GRN" OK!\n"RESET);
+    printf(GRN" OK!\n"RESET);
 
     int status = copy_str_to_file(rawfile, fileName, fileSize);
     free(rawfile);
