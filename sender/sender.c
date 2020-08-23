@@ -160,7 +160,6 @@ SOCKET create_socket(int domain, int type, int protocol, SOCKADDR_IN* sin, char*
 
     sin->sin_addr.s_addr = inet_addr(ip);
     sin->sin_family = domain;
-    fprintf(stderr, "VOTRE PORT : %s", port);
     sin->sin_port = htons(atoi(port));
 
     printf("OK!\n");
