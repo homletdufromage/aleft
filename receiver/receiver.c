@@ -186,7 +186,30 @@ bool check_header(char* filename, char* fileSizeStr) {
     return true;
 }
 
-void recvFile(SOCKET sockfd, char** rawfile, size_t recvBytesNb, size_t fileSize) {
+void show_progress(size_t recvBytesNb, size_t fileSize) {
+    printf("\r");
+    fflush(stdout);
+    float recvStr = (float) recvBytesNb, sizeStr = (float) fileSize;
+    char unit[3];
+    strcpy(unit, "B\0");
+    if (recvBytesNb > 1000 && recvBytesNb < 1000000) {
+        recvStr /= 1000.0;
+        sizeStr /= 1000.0;
+        strcpy(unit, "KB\0");
+    } else if (recvBytesNb >= 1000000 && recvBytesNb < 1000000000) {
+        recvStr /= 1000000.0;
+        sizeStr /= 1000000.0;
+        strcpy(unit, "MB\0");
+    } else if (recvBytesNb >= 1000000000) {
+        recvStr /= 1000000000.0;
+        sizeStr /= 1000000000.0;
+        strcpy(unit, "GB\0");
+    }
+    printf("Awaiting file...%0.f%% (%.2f/%.2f %s received)", ((float)recvStr/(float)sizeStr)*100.0, recvStr, sizeStr, unit);
+    fflush(stdout);
+}
+
+int recvFile(SOCKET sockfd, FILE* file, size_t recvBytesNb, size_t fileSize) {
     char buffer[BUF_SIZE] = {0};
     int msgSize = 0;
 
@@ -194,30 +217,14 @@ void recvFile(SOCKET sockfd, char** rawfile, size_t recvBytesNb, size_t fileSize
     fflush(stdout);
     while ((msgSize = recv(sockfd, buffer, BUF_SIZE, 0)) != 0) {
         if (msgSize != -1) {
-            *rawfile = realloc(*rawfile, recvBytesNb + msgSize);
             for(size_t i = 0; i < msgSize; i++)
-                (*rawfile)[recvBytesNb+i] = buffer[i];
+                if (fprintf(file, "%c", buffer[i]) < 0) {
+                    fprintf(stderr, RED"Error: "RESET"cannot save the file.\n");
+                    break;
+                }
             recvBytesNb += msgSize;
 
-            fprintf(stderr, "\r");
-            float recvStr = (float) recvBytesNb, sizeStr = (float) fileSize;
-            char unit[3];
-            strcpy(unit, "B\0");
-            if (recvBytesNb > 1000 && recvBytesNb < 1000000) {
-                recvStr /= 1000.0;
-                sizeStr /= 1000.0;
-                strcpy(unit, "KB\0");
-            } else if (recvBytesNb >= 1000000 && recvBytesNb < 1000000000) {
-                recvStr /= 1000000.0;
-                sizeStr /= 1000000.0;
-                strcpy(unit, "MB\0");
-            } else if (recvBytesNb >= 1000000000) {
-                recvStr /= 1000000000.0;
-                sizeStr /= 1000000000.0;
-                strcpy(unit, "GB\0");
-            }
-            printf("Awaiting file...%0.f%% (%.2f/%.2f %s received)", ((float)recvStr/(float)sizeStr)*100.0, recvStr, sizeStr, unit);
-            fflush(stdout);
+            show_progress(recvBytesNb, fileSize);
 
             if (recvBytesNb >= fileSize)
                 break;
@@ -226,27 +233,10 @@ void recvFile(SOCKET sockfd, char** rawfile, size_t recvBytesNb, size_t fileSize
 
     if (recvBytesNb < fileSize) {
         fprintf(stderr, RED "\nError: " RESET "Transfer is incomplete, only %lu Bytes out of %lu received.\n", recvBytesNb, fileSize);
-        if (*rawfile) {
-            free(*rawfile);
-            *rawfile = NULL;
-        }
-    }
-}
-
-int copy_str_to_file(char* rawfile, char* fileName, size_t fileSize) {
-    // SAVING THE FILE
-    FILE* file = fopen(fileName, "w");
-    if (!file)
         return EXIT_FAILURE;
-
-    for(size_t i = 0; i < fileSize; i++)
-        if (fprintf(file, "%c", rawfile[i]) < 0) {
-            fclose(file);
-            fprintf(stderr, RED "Error: " RESET "an error has occured during the saving of the file.\n");
-            return EXIT_FAILURE;
-        }
+    }
     
-    fclose(file);
+    printf(GRN" OK!\n"RESET);
     return EXIT_SUCCESS;
 }
 
@@ -276,36 +266,36 @@ int start_transfer(SOCKET senderSocket) {
     decode_fileSize(header, &fileSize);
     printf(GRN"OK!\n"RESET);
 
+    // Saving the file
+    FILE* file = fopen(fileName, "w");
+    if (!file) {
+        free(header);
+        fprintf(stderr, RED"Error:"RESET" fopen failed.");
+        return EXIT_FAILURE;
+    }
     /* *
      * If headerSize > FILENAME_LEN+FILESIZE_LEN, then it means
      * that a part of the beginning of the file is contained
      * inside of header, and has to be put into "rawfile".
      * */
-    char* rawfile = NULL;
     size_t recvBytesNb = 0;
     if (headerSize > FILENAME_LEN+FILESIZE_LEN) { 
         recvBytesNb = headerSize-(FILENAME_LEN+FILESIZE_LEN);
-        rawfile = malloc(recvBytesNb);
         for(size_t i = 0; i < recvBytesNb; i++) {
-            rawfile[i] = header[FILENAME_LEN+FILESIZE_LEN+i];
+            if (fprintf(file, "%c", header[FILENAME_LEN+FILESIZE_LEN+i]) < 0) {
+                fclose(file);
+                free(header);
+                fprintf(stderr, RED"Error: "RESET"an error has occured during the writing of the file.\n");
+                return EXIT_FAILURE;
+            }
         }
     }
 
     // Receiving the file
-    recvFile(senderSocket, &rawfile, recvBytesNb, fileSize);
+    int status = recvFile(senderSocket, file, recvBytesNb, fileSize);
+    fclose(file);
     close(senderSocket);
     free(header);
-
-    if (!rawfile) {
-        return EXIT_FAILURE;
-    }
-    printf(GRN" OK!\n"RESET);
-
-    int status = copy_str_to_file(rawfile, fileName, fileSize);
-    free(rawfile);
-
-    if (status != EXIT_SUCCESS)
-        fprintf(stderr, "The file couldn't be saved.\n");
 
     return status;
 }

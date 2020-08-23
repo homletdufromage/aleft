@@ -16,10 +16,22 @@
 #include <string.h>
 #include "receiver.h"
 
-int parse_arguments(int argc, char** argv, char* port){;
+#define PORT_STR_SIZE 5
+
+inline static bool check_port(char* port) {
+    for(int i = 0; i < PORT_STR_SIZE && port[i]; i++) {
+        if (port[i] < '0' || port[i] > '9') {
+            printf("char : %c", port[i]);
+            return false;
+        }
+    }
+    return true;
+}
+
+static int parse_arguments(int argc, char** argv, char* port){;
 
     if(argc < 3){
-        fprintf(stderr, "usage : %s -p [PORT NUMBER]\n", argv[0]);
+        fprintf(stderr, RED"Error:"RESET" usage: %s -p [PORT NUMBER]\n", argv[0]);
         return EXIT_FAILURE;
     }
 
@@ -35,10 +47,14 @@ int parse_arguments(int argc, char** argv, char* port){;
                 break;
 
             default:
-                fprintf(stderr, "usage : %s -p [PORT NUMBER]\n", argv[0]);
+                fprintf(stderr, RED"usage:"RESET" %s -p [PORT NUMBER]\n", argv[0]);
                 return EXIT_FAILURE;
 
         }
+    }
+    if (!check_port(port)) {
+        fprintf(stderr, RED"Error:"RESET" Inv   alid port number\n");
+        return EXIT_FAILURE;
     }
 
     return EXIT_SUCCESS;
@@ -47,20 +63,21 @@ int parse_arguments(int argc, char** argv, char* port){;
 
 int main(int argc, char const *argv[])
 {
-    char PORT[6] = {0};
+    char PORT[PORT_STR_SIZE+1] = {0};
 
     if(parse_arguments(argc, (char**) argv, PORT) == EXIT_FAILURE)
         return EXIT_FAILURE;
     SOCKET sockfd;
 
     printf("Creating the receiver socket...");
+    fflush(stdout);
     if ((sockfd = create_socket(PORT)) == -1) {
         fprintf(stderr, RED"Error:"RESET" Unable to create the receiver socket\n");
-        exit(1);
+        return EXIT_FAILURE;
     }
     printf(GRN "OK !\n");
 
-    printf("Listening...\n"RESET);
+    printf("Listening..."RESET"\n");
     SOCKET new_sockfd;
     if ((new_sockfd = listen_sender(sockfd)) == -1)
         fprintf(stderr, RED "Error: " RESET "the connection couldn't be made.\n");
@@ -68,7 +85,7 @@ int main(int argc, char const *argv[])
     if (start_transfer(new_sockfd) == EXIT_SUCCESS)
         printf(GRN "Transfer completed successfully.\n" RESET);
     else
-        printf(RED "\nError: " RESET "File not received.\n");
+        printf(RED "\nFailure: " RESET "File not received.\n");
 
     return 0;
 }

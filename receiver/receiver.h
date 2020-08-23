@@ -133,6 +133,14 @@ void decode_fileName(char* header, char* fileName);
 bool check_header(char* filename, char* fileSizeStr);
 
 /**
+ * Manages the progress bar
+ * 
+ * @param recvBytesNb number of received Bytes
+ * @param fileSize size of the file
+ * */
+void show_progress(size_t recvBytesNb, size_t fileSize);
+
+/**
  * Listens to sockfd to receive the file
  * 
  * @param sockfd sender's socket descriptor
@@ -142,15 +150,6 @@ bool check_header(char* filename, char* fileSizeStr);
  * 
  * If an error occurs, (*rawfile) is set to NULL and the memory is freed.
  */
-void recvFile(SOCKET sockfd, char** rawfile, size_t recvBytesNb, size_t fileSize);
-
-/**
- * Saves the string contained in rawfile in a file "fileName".
- * 
- * @param rawfile string to save into a file
- * @param fileName name of the file
- * @param fileSize size of rawfile
- */
-int copy_str_to_file(char* rawfile, char* fileName, size_t fileSize);
+int recvFile(SOCKET sockfd, FILE* file, size_t recvBytesNb, size_t fileSize);
 
 #endif // __RECEIVER__
