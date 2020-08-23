@@ -14,12 +14,10 @@ typedef int SOCKET;
 typedef struct sockaddr_in SOCKADDR_IN;
 typedef struct sockaddr SOCKADDR;
 
-#define PORT "11037"
-#define IP "127.0.0.1"
-
 #define BUF_SIZE 1024
 
 #define MAX_FORMAT_SIZE 7
+#define NB_ARGS 8
 #define MAX_SIZE 9999999999
 
 #define FILENAME_LEN 128
@@ -109,4 +107,11 @@ void stop_connection(SOCKET sock);
 /*
 * parses command line arguments given to the program
 */
-int parse_arguments(int argc, char** argv, File** f);
+int parse_arguments(int argc, char** argv, File** f, char* ip, char* port);
+
+/*
+*
+* fixes a file name that is actually a path (example : /home/user/test.txt becomes test.txt)
+*
+*/
+void fix_name(char* name);
