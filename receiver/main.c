@@ -6,10 +6,8 @@
  * @date August 2020
  * 
  * @note This program is a part of the ALEFT Project.
- *       It's a naive file transfert program, which allows
- *       two users to transfer a file to each other.
- * 
- *       This program simply listens through the port 11037.
+ *       It's a naive file transfer program, which allows
+ *       two computers to transfer a file to each other.
  * */
 #include <stdio.h>
 #include <stdlib.h>
