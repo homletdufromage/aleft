@@ -53,7 +53,7 @@ static int parse_arguments(int argc, char** argv, char* port){;
         }
     }
     if (!check_port(port)) {
-        fprintf(stderr, RED"Error:"RESET" Inv   alid port number\n");
+        fprintf(stderr, RED"Error:"RESET" Invalid port number\n");
         return EXIT_FAILURE;
     }
 
@@ -78,6 +78,7 @@ int main(int argc, char const *argv[])
     printf(GRN "OK !\n");
 
     printf("Listening..."RESET"\n");
+    fflush(stdout);
     SOCKET new_sockfd;
     if ((new_sockfd = listen_sender(sockfd)) == -1)
         fprintf(stderr, RED "Error: " RESET "the connection couldn't be made.\n");

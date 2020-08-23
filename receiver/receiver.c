@@ -215,11 +215,13 @@ int recvFile(SOCKET sockfd, FILE* file, size_t recvBytesNb, size_t fileSize) {
 
     printf("Awaiting file...0%% (0/0 B received)");
     fflush(stdout);
-    while ((msgSize = recv(sockfd, buffer, BUF_SIZE, 0)) != 0) {
+    bool error = false;
+    while (!error && (msgSize = recv(sockfd, buffer, BUF_SIZE, 0)) != 0) {
         if (msgSize != -1) {
             for(size_t i = 0; i < msgSize; i++)
                 if (fprintf(file, "%c", buffer[i]) < 0) {
-                    fprintf(stderr, RED"Error: "RESET"cannot save the file.\n");
+                    fprintf(stderr, "\n"RED"Error: "RESET"cannot save the file.\n");
+                    error = true;
                     break;
                 }
             recvBytesNb += msgSize;
@@ -235,7 +237,7 @@ int recvFile(SOCKET sockfd, FILE* file, size_t recvBytesNb, size_t fileSize) {
         fprintf(stderr, RED "\nError: " RESET "Transfer is incomplete, only %lu Bytes out of %lu received.\n", recvBytesNb, fileSize);
         return EXIT_FAILURE;
     }
-    
+
     printf(GRN" OK!\n"RESET);
     return EXIT_SUCCESS;
 }
@@ -266,7 +268,7 @@ int start_transfer(SOCKET senderSocket) {
     decode_fileSize(header, &fileSize);
     printf(GRN"OK!\n"RESET);
 
-    // Saving the file
+    // Receiving the file
     FILE* file = fopen(fileName, "w");
     if (!file) {
         free(header);
